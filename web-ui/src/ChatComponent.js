@@ -3,7 +3,7 @@ import './ChatComponentStyle.css';
 
 
 const ChatComponent = () => {
-    const [chatHistory, setChatHistory] = useState([{ role: 'bot', content: "Hello! I'm here to assist you with any questions you may have." }]);
+    const [chatHistory, setChatHistory] = useState([{ role: 'bot', content: "Hi! I'm here to assist you with any questions you may have." }]);
     const [userMessage, setUserMessage] = useState('');
     const inputRef = useRef(null);
     const chatContainerRef = useRef(null);
