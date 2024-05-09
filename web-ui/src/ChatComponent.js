@@ -1,12 +1,16 @@
 import React, { useRef, useState, useEffect } from 'react';
 import './ChatComponentStyle.css';
 
-
 const ChatComponent = () => {
     const [chatHistory, setChatHistory] = useState([{ role: 'bot', content: "Hello! I'm here to assist you with any questions you may have." }]);
     const [userMessage, setUserMessage] = useState('');
     const inputRef = useRef(null);
     const chatContainerRef = useRef(null);
+    const [appliances, setAppliances] = useState({
+        fridge: 'off',
+        furnace: 'off',
+        dishwasher: 'off'
+    });
 
     const sendMessage = () => {
         const messageInput = userMessage.trim();
@@ -20,7 +24,7 @@ const ChatComponent = () => {
       
         ` + "user prompt: " + '"' + messageInput + '"';
     
-        const userMessageObj = { role: 'user', content: userMessage };
+        const userMessageObj = { role: 'user', content: messageInput };
         setChatHistory(prevChatHistory => [...prevChatHistory, userMessageObj]);
         setUserMessage('');
 
@@ -33,27 +37,35 @@ const ChatComponent = () => {
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                question: messageInput
+                question: message
             })
         })
         .then((response) => response.json())
         .then((data) => {
             const botResponse = data.response;
-            // const ans = checkBotResponse(botResponse);
-            const botMessageObj = { role: 'bot', content: botResponse };
+            const ans = checkBotResponse(botResponse);
+            const botMessageObj = { role: 'bot', content: ans };
             setChatHistory(prevChatHistory => [...prevChatHistory, botMessageObj]);
         })
         .catch((error) => console.error(error));
     }
 
     const checkBotResponse = (botResponse) => {
+        console.log(botResponse)
         botResponse = botResponse.replace("formatted output: ", "");
         const data = JSON.parse(botResponse);
 
         const message = data.to_say;
         const service = data.service;
         const target = data.target;
-
+        
+        if (target === "fridge") {
+            setAppliances(prevAppliances => ({ ...prevAppliances, fridge: service === "turn_on()" ? 'on' : 'off' }));
+        } else if (target === "furnace") {
+            setAppliances(prevAppliances => ({ ...prevAppliances, furnace: service === "turn_on()" ? 'on' : 'off' }));
+        } else if (target === "dishwasher") {
+            setAppliances(prevAppliances => ({ ...prevAppliances, dishwasher: service === "turn_on()" ? 'on' : 'off' }));
+        }
         if (target === "all") {
             // Handle target === "all"
         }
@@ -79,9 +91,12 @@ const ChatComponent = () => {
                 <div className='row justify-content-center' style={{ height: '50vh', border: '1px solid rgba(128, 128, 128, 0.5)', width: '50vw', marginBottom: '10px', padding: '10px', textAlign: 'center' }}>
                     Appliances
                     <div style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-around', width: '100%' }}>
-                        <div style={{ flex: 1, border: '1px solid grey', margin: '5px', height: '20vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Block 1</div>
-                        <div style={{ flex: 1, border: '1px solid grey', margin: '5px', height: '20vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Block 2</div>
-                        <div style={{ flex: 1, border: '1px solid grey', margin: '5px', height: '20vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Block 3</div>
+                        {Object.keys(appliances).map((appliance) => (
+                            <div key={appliance} style={{ flex: 1, border: '1px solid grey', margin: '5px', height: '20vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                                <h5>{appliance}</h5>
+                                <p>{appliances[appliance]}</p>
+                            </div>
+                        ))}
                     </div>
                 </div>
                 <div className='row justify-content-center' style={{ height: '50vh', border: '1px solid rgba(128, 128, 128, 0.5)', width: '50vw', padding: '10px', textAlign: 'center' }}>
