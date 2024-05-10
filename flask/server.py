@@ -197,15 +197,18 @@ def finetune_model():
     validation_data = [] 
     validation_data = prepare_example_conversation("validate")
     training_file_name = "tmp_recipe_finetune_training.jsonl"
-    json_data = json.dumps(training_data, indent=4)
-    with open(training_file_name, 'w') as file:
-        file.write(json_data)
-
+    write_jsonl(training_data, training_file_name)
     validation_file_name = "tmp_recipe_finetune_validation.jsonl"
-    json_data = json.dumps(validation_data, indent=4)
+    write_jsonl(validation_data, validation_file_name)
+    # json_data = json.dumps(training_data, indent=4)
+    # with open(training_file_name, 'w') as file:
+    #     file.write(json_data)
 
-    with open(validation_file_name, 'w') as file:
-        file.write(json_data)
+    # validation_file_name = "tmp_recipe_finetune_validation.jsonl"
+    # json_data = json.dumps(validation_data, indent=4)
+
+    # with open(validation_file_name, 'w') as file:
+    #     file.write(json_data)
 
     with open(training_file_name, "rb") as training_fd:
         training_response = client.files.create(
@@ -235,7 +238,7 @@ def finetune_model():
     print("Job ID:", response.id)
     print("Status:", response.status)
 
-    response = client.fine_tuning.jobs.retrieve("ftjob-7e0vys0urReIlaF3wbvAE7Kc")
+    response = client.fine_tuning.jobs.retrieve(job_id)
     print("Trained Tokens:", response.trained_tokens)
 
     response = client.fine_tuning.jobs.list_events(job_id)
@@ -255,6 +258,8 @@ def finetune_model():
 
 def prepare_example_conversation(str):
     messages = []
+    messages1 = []
+    messages2 = []
     system_message = '''You are a helpful Smart Energy Assistant. 
             You are to answer all energy consumption related queries in a household.''' 
             # Answer the above question based on the following format: 
@@ -265,27 +270,45 @@ def prepare_example_conversation(str):
             # user prompt: "''' + messageInput + '''"'''
 
     if str == "train":
-        messages.append({"role": "system", "content": system_message})
-        messages.append({"role": "user", "content": "Could you please switch off the fridge"})
-        messages.append({"role": "assistant", "content": '''"formatted output: {"to_say" : "Sure, turing off the fridge",  
+        messages1.append({"role": "system", "content": system_message})
+        messages1.append({"role": "user", "content": "Could you please switch off the fridge"})
+        messages1.append({"role": "assistant", "content": '''"formatted output: {"to_say" : "Sure, turing off the fridge",  
             "service" : "turn_off()", "target" : "fridge"}"'''})
-        messages.append({"role": "system", "content": system_message})
-        messages.append({"role": "user", "content": "Could you please switch on the furnace"})
-        messages.append({"role": "assistant", "content": '''"formatted output: {"to_say" : "Hey, sure, I'll turn on the furnace",  
+        messages2.append({"role": "system", "content": system_message})
+        messages2.append({"role": "user", "content": "Could you please switch on the furnace"})
+        messages2.append({"role": "assistant", "content": '''"formatted output: {"to_say" : "Hey, sure, I'll turn on the furnace",  
             "service" : "turn_on()", "target" : "furnace"}"'''})
-        return {"messages": messages}
+        response_data = [{"messages": messages1}, {"messages": messages2}]
+        return response_data
     else:
-        messages.append({"role": "system", "content": system_message})
-        messages.append({"role": "user", "content": "Could you put off the fridge"})
-        messages.append({"role": "assistant", "content": '''"formatted output: {"to_say" : "Sure, turing off the fridge",  
+        messages1.append({"role": "system", "content": system_message})
+        messages1.append({"role": "user", "content": "Could you put off the fridge"})
+        messages1.append({"role": "assistant", "content": '''"formatted output: {"to_say" : "Sure, turing off the fridge",  
             "service" : "turn_off()", "target" : "fridge"}"'''})
-        messages.append({"role": "system", "content": system_message})
-        messages.append({"role": "user", "content": "Could you please shut down the furnace"})
-        messages.append({"role": "assistant", "content": '''"formatted output: {"to_say" : "Hey, sure, I'll turn on the furnace",  
+        messages2.append({"role": "system", "content": system_message})
+        messages2.append({"role": "user", "content": "Could you please shut down the furnace"})
+        messages2.append({"role": "assistant", "content": '''"formatted output: {"to_say" : "Hey, sure, I'll turn on the furnace",  
             "service" : "turn_off()", "target" : "furnace"}"'''})
-    
-        return {"messages": messages}
+        response_data = [{"messages": messages1}, {"messages": messages2}]
+        return response_data
 
+@app.route('/anomalyDetection', methods=['POST'])
+@cross_origin()
+def anomaly_detection():
+    try:
+        data = request.get_json()
+        question = data['question']
+        model_response = get_model_response(question)
+        return jsonify({'response': model_response}), 200
+    except Exception as e:
+        print(f"Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+def write_jsonl(data_list: list, filename: str) -> None:
+    with open(filename, "w") as out:
+        for ddict in data_list:
+            jout = json.dumps(ddict) + "\n"
+            out.write(jout)
 
 if __name__ == '__main__':
     finetune_model()
