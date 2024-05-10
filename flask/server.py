@@ -19,7 +19,7 @@ import pickle
 import openai
 import streamlit as st
 import json
-from openai import OpenAI
+# from openai import OpenAI
 import os
 from pprint import pprint
 import statsmodels.api as sm
@@ -200,16 +200,7 @@ def finetune_model():
     write_jsonl(training_data, training_file_name)
     validation_file_name = "tmp_recipe_finetune_validation.jsonl"
     write_jsonl(validation_data, validation_file_name)
-    # json_data = json.dumps(training_data, indent=4)
-    # with open(training_file_name, 'w') as file:
-    #     file.write(json_data)
-
-    # validation_file_name = "tmp_recipe_finetune_validation.jsonl"
-    # json_data = json.dumps(validation_data, indent=4)
-
-    # with open(validation_file_name, 'w') as file:
-    #     file.write(json_data)
-
+  
     with open(training_file_name, "rb") as training_fd:
         training_response = client.files.create(
             file=training_fd, purpose="fine-tune"
@@ -297,8 +288,29 @@ def prepare_example_conversation(str):
 def anomaly_detection():
     try:
         data = request.get_json()
-        question = data['question']
-        model_response = get_model_response(question)
+        current_values = data['currentValues']
+        predicted_values = data['predictedValues']
+        currentTime = data['currentTime']
+        fridge_current_value = current_values['fridge']
+        furnace_current_value = current_values['furnace']
+        dishwasher_current_value = current_values['dishwasher']
+        fridge_predicted_values = predicted_values['fridge_predicted']
+        furnace_predicted_values = predicted_values['furnace_predicted']
+        dishwasher_predicted_values = predicted_values['dishwasher_predicted']
+
+        if len(fridge_predicted_values) > currentTime:
+            fridge_predicted_value = fridge_predicted_values[currentTime]
+            dishwasher_predicted_value = dishwasher_predicted_values[currentTime]
+            furnace_predicted_value = furnace_predicted_values[currentTime]
+            if fridge_predicted_value is not None:
+                message = '''"Tell whether the energy consumption is anomalous or normal for fridge, predicted value is {fridge_predicted_value} kWh, actual value is {fridge_current_value} kWh with a reason in this format\n 
+                '"formatted output: {"to_say": "The energy consumption of fridge is anomalous/normal with a reason why it is anomalous", "service": "anomaly()/normal()", "target": "fridge"}"'''
+           
+        else:
+            print('No predicted value available for the current time.')
+
+        # question = data['question']
+        model_response = get_model_response(message)
         return jsonify({'response': model_response}), 200
     except Exception as e:
         print(f"Error: {e}")
@@ -311,5 +323,5 @@ def write_jsonl(data_list: list, filename: str) -> None:
             out.write(jout)
 
 if __name__ == '__main__':
-    finetune_model()
-    # app.run(port=8000, debug=True)
+    # finetune_model()
+    app.run(port=8000, debug=True)

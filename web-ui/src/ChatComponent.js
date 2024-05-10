@@ -20,7 +20,7 @@ const ChatComponent = () => {
 
     const [chartValues , setChartValue] = useState(inputData);
      useEffect(()=>{
-        console.log(chartValues)
+        // console.log(chartValues)
      },[chartValues])
 
     const [appliancesKWHValues, setAppliancesKWHValues] = useState({
@@ -29,6 +29,10 @@ const ChatComponent = () => {
         dishwasher: 0
     });
 
+    useEffect(()=>{
+        sendData()
+    },[appliancesKWHValues])
+    
     const sendData = () => {
         const dataToSend = {
             currentTime: currentTime,
@@ -45,6 +49,8 @@ const ChatComponent = () => {
         })
         .then(response => response.json())
         .then(data => {
+            const botResponse = data.response;
+            checkBotResponse(botResponse);
             console.log(data);
         })
         .catch(error => {
@@ -53,7 +59,7 @@ const ChatComponent = () => {
     };
     
     // Call the fetchData function every minute
-    const interval = setInterval(sendData, 60000);
+    // const interval = setInterval(sendData, 60000);
 
     const sendMessage = () => {
         const messageInput = userMessage.trim();
@@ -101,7 +107,11 @@ const ChatComponent = () => {
         const message = data.to_say;
         const service = data.service;
         const target = data.target;
-        
+        if (service === "anomaly()") {
+            const botMessageObj = { role: 'bot', content: message };
+            setChatHistory(prevChatHistory => [...prevChatHistory, botMessageObj]);
+        }
+            
         if (target === "fridge") {
             setAppliances(prevAppliances => ({ ...prevAppliances, fridge: service === "turn_on()" ? 'on' : 'off' }));
         } else if (target === "furnace") {
@@ -112,7 +122,6 @@ const ChatComponent = () => {
         if (target === "all") {
             // Handle target === "all"
         }
-
         return message;
     }
 
@@ -139,18 +148,18 @@ const ChatComponent = () => {
     }
     
     const timerFunction = () => {
-        console.log('Timer function called!');
+        // console.log('Timer function called!');
         setCurrentTime(prevTime => prevTime + 1);
       };
 
       useEffect(()=>{
         setChartValue(prevChartValues => {
               const updatedFridgeData = [...prevChartValues['fridge_current']];
-              updatedFridgeData[currentTime] = appliances['fridge']=='on'?parseFloat(appliancesKWHValues['fridge']):0;
+              updatedFridgeData[currentTime] = appliances['fridge']==='on'?parseFloat(appliancesKWHValues['fridge']):0;
               const updatedFurnaceData = [...prevChartValues['furnace_current']];
-              updatedFurnaceData[currentTime] = appliances['furnace']=='on'?parseFloat(appliancesKWHValues['furnace']):0;
+              updatedFurnaceData[currentTime] = appliances['furnace']==='on'?parseFloat(appliancesKWHValues['furnace']):0;
               const updatedDishwasherData = [...prevChartValues['dishwasher_current']];
-              updatedDishwasherData[currentTime] = appliances['dishwasher']=='on'?parseFloat(appliancesKWHValues['dishwasher']):0;
+              updatedDishwasherData[currentTime] = appliances['dishwasher']==='on'?parseFloat(appliancesKWHValues['dishwasher']):0;
               return {
                 fridge_predicted: prevChartValues['fridge_predicted'],
                 fridge_current: updatedFridgeData,
@@ -170,6 +179,13 @@ const ChatComponent = () => {
         return () => clearInterval(intervalId);
       }, []); 
 
+    const handleSwitchChange = (appliance) => {
+        setAppliances(prevAppliances => ({
+            ...prevAppliances,
+            [appliance]: prevAppliances[appliance] === 'on' ? 'off' : 'on'
+        }));
+    };
+
     return (
         <div className='row justify-content-center'>
             <div className='col' style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -179,11 +195,16 @@ const ChatComponent = () => {
                         {Object.keys(appliances).map((appliance) => (
                             <div key={appliance} style={{ borderRadius:10,flex: 1, border: '1px solid grey', margin: '5px', height: '20vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
                                 <h6>{appliance.toUpperCase()}</h6>
-                                <Switch onChange={()=>{}} 
-                                checked={appliances[appliance]=='on'?true:false} 
+                                <Switch
+                                    onChange={() => handleSwitchChange(appliance)}
+                                    checked={appliances[appliance] === 'on'}
+                                    checkedIcon={<h6 style={{ margin:0, marginLeft:3, color:'white', paddingTop:3}}>On</h6>}
+                                    uncheckedIcon={<h6 style={{ margin:0, marginLeft:2, color:'white', paddingTop:3}}>Off</h6>}
+                                />
+                                {/* checked={appliances[appliance]==='on'?true:false} 
                                 checkedIcon={<h6 style={{ margin:0, marginLeft:3, color:'white', paddingTop:3}}>On</h6>}
-                                uncheckedIcon={<h6 style={{ margin:0, marginLeft:2, color:'white', paddingTop:3}}>Off</h6>}/>
-                                {appliances[appliance]=='on'?<input
+                                uncheckedIcon={<h6 style={{ margin:0, marginLeft:2, color:'white', paddingTop:3}}>Off</h6>}/> */}
+                                {appliances[appliance]==='on'?<input
                                 key={appliances[appliance]}
                                 style={{width:'30%', marginTop:10, border: '1px solid black',borderRadius:3, textAlign:'center'}}
                                     type="text"
