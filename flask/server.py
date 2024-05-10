@@ -18,6 +18,10 @@ from transformers import AutoTokenizer, LlamaForCausalLM, PretrainedConfig, Open
 import pickle
 import openai
 import streamlit as st
+import json
+from openai import OpenAI
+import os
+from pprint import pprint
 
 app = Flask(__name__)
 CORS(app)
@@ -98,5 +102,103 @@ def get_response():
         print(f"Error: {e}")
         return jsonify({'error': str(e)}), 500
 
+def finetune_model():
+    client = openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY", "sk-proj-e3QZjmsa1hrsvNqwJnIHT3BlbkFJlVCgUArGrhReSbRYVUDz"))
+    training_data = []
+    training_data = prepare_example_conversation("train")
+    validation_data = [] 
+    validation_data = prepare_example_conversation("validate")
+    training_file_name = "tmp_recipe_finetune_training.jsonl"
+    json_data = json.dumps(training_data, indent=4)
+    with open(training_file_name, 'w') as file:
+        file.write(json_data)
+
+    validation_file_name = "tmp_recipe_finetune_validation.jsonl"
+    json_data = json.dumps(validation_data, indent=4)
+
+    with open(validation_file_name, 'w') as file:
+        file.write(json_data)
+
+    with open(training_file_name, "rb") as training_fd:
+        training_response = client.files.create(
+            file=training_fd, purpose="fine-tune"
+        )
+
+    training_file_id = training_response.id
+
+    with open(validation_file_name, "rb") as validation_fd:
+        validation_response = client.files.create(
+            file=validation_fd, purpose="fine-tune"
+        )
+    validation_file_id = validation_response.id
+
+    print("Training file ID:", training_file_id)
+    print("Validation file ID:", validation_file_id)
+
+    response = client.fine_tuning.jobs.create(
+    training_file=training_file_id,
+    validation_file=validation_file_id,
+    model="gpt-3.5-turbo",
+    suffix="smart-energy",
+    )
+
+    job_id = response.id
+
+    print("Job ID:", response.id)
+    print("Status:", response.status)
+
+    response = client.fine_tuning.jobs.retrieve("ftjob-7e0vys0urReIlaF3wbvAE7Kc")
+    print("Trained Tokens:", response.trained_tokens)
+
+    response = client.fine_tuning.jobs.list_events(job_id)
+
+    events = response.data
+    events.reverse()
+
+    for event in events:
+        print(event.message)
+
+    response = client.fine_tuning.jobs.retrieve(job_id)
+    fine_tuned_model_id = response.fine_tuned_model
+    if fine_tuned_model_id is None: 
+        raise RuntimeError("Fine-tuned model ID not found. Your job has likely not been completed yet.")
+
+    print("Fine-tuned model ID:", fine_tuned_model_id)
+
+def prepare_example_conversation(str):
+    messages = []
+    system_message = '''You are a helpful Smart Energy Assistant. 
+            You are to answer all energy consumption related queries in a household.''' 
+            # Answer the above question based on the following format: 
+            # user prompt: Tell the current status of all the appliances - 
+            # formatted output: {"to_say" : "Here is the current status of all appliances",  
+            # "service" : "status()", "target" : "all"}
+
+            # user prompt: "''' + messageInput + '''"'''
+
+    if str == "train":
+        messages.append({"role": "system", "content": system_message})
+        messages.append({"role": "user", "content": "Could you please switch off the fridge"})
+        messages.append({"role": "assistant", "content": '''"formatted output: {"to_say" : "Sure, turing off the fridge",  
+            "service" : "turn_off()", "target" : "fridge"}"'''})
+        messages.append({"role": "system", "content": system_message})
+        messages.append({"role": "user", "content": "Could you please switch on the furnace"})
+        messages.append({"role": "assistant", "content": '''"formatted output: {"to_say" : "Hey, sure, I'll turn on the furnace",  
+            "service" : "turn_on()", "target" : "furnace"}"'''})
+        return {"messages": messages}
+    else:
+        messages.append({"role": "system", "content": system_message})
+        messages.append({"role": "user", "content": "Could you put off the fridge"})
+        messages.append({"role": "assistant", "content": '''"formatted output: {"to_say" : "Sure, turing off the fridge",  
+            "service" : "turn_off()", "target" : "fridge"}"'''})
+        messages.append({"role": "system", "content": system_message})
+        messages.append({"role": "user", "content": "Could you please shut down the furnace"})
+        messages.append({"role": "assistant", "content": '''"formatted output: {"to_say" : "Hey, sure, I'll turn on the furnace",  
+            "service" : "turn_off()", "target" : "furnace"}"'''})
+    
+        return {"messages": messages}
+
+
 if __name__ == '__main__':
-    app.run(port=8000, debug=True)
+    finetune_model()
+    # app.run(port=8000, debug=True)
