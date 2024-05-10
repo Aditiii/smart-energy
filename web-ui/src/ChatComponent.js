@@ -3,7 +3,8 @@ import './ChatComponentStyle.css';
 
 import Switch from "react-switch";
 import inputData from './forecasted_values_month.json'
-import { ResponsiveLine } from '@nivo/line'
+import Highcharts from 'highcharts';
+import HighchartsReact from 'highcharts-react-official';
 
 const ChatComponent = () => {
     const [chatHistory, setChatHistory] = useState([{ role: 'bot', content: "Hello! I'm here to assist you with any questions you may have." }]);
@@ -18,16 +19,9 @@ const ChatComponent = () => {
     const [currentTime, setCurrentTime] = useState(0);
 
     const [chartValues , setChartValue] = useState(inputData);
-    const [chartData,setChartData] = useState([]);
      useEffect(()=>{
-        const result = Object.entries(chartValues).map(([key, values], index) => ({
-            id: key,
-            color: `hsl(${index * 40}, 70%, 50%)`,
-            data: values.map((value, index) => ({ x: index, y: value }))
-          }));
-          console.log(currentTime, result);
-          setChartData(result)
-     },[chartValues, currentTime])
+        console.log(chartValues)
+     },[chartValues])
 
     const [appliancesKWHValues, setAppliancesKWHValues] = useState({
         fridge: 0,
@@ -36,8 +30,18 @@ const ChatComponent = () => {
     });
 
     const sendData = () => {
+        const dataToSend = {
+            currentTime: currentTime,
+            currentValues: appliancesKWHValues,
+            predictedValues: inputData
+        };
+    
         fetch('http://localhost:8000/anomalyDetection', {
-            
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(dataToSend)
         })
         .then(response => response.json())
         .then(data => {
@@ -140,17 +144,22 @@ const ChatComponent = () => {
       };
 
       useEffect(()=>{
-        if (appliances['fridge'] === 'on') {
-            setChartValue(prevChartValues => {
-              const updatedFridgeData = [...prevChartValues['fridge']];
-              updatedFridgeData[currentTime] = appliancesKWHValues['fridge'];
+        setChartValue(prevChartValues => {
+              const updatedFridgeData = [...prevChartValues['fridge_current']];
+              updatedFridgeData[currentTime] = appliances['fridge']=='on'?parseFloat(appliancesKWHValues['fridge']):0;
+              const updatedFurnaceData = [...prevChartValues['furnace_current']];
+              updatedFurnaceData[currentTime] = appliances['furnace']=='on'?parseFloat(appliancesKWHValues['furnace']):0;
+              const updatedDishwasherData = [...prevChartValues['dishwasher_current']];
+              updatedDishwasherData[currentTime] = appliances['dishwasher']=='on'?parseFloat(appliancesKWHValues['dishwasher']):0;
               return {
-                ...prevChartValues,
-                fridge: updatedFridgeData
+                fridge_predicted: prevChartValues['fridge_predicted'],
+                fridge_current: updatedFridgeData,
+                dishwasher_predicted: prevChartValues['dishwasher_predicted'],
+                dishwasher_current: updatedDishwasherData,
+                furnace_predicted: prevChartValues['furnace_predicted'],
+                furnace_current: updatedFurnaceData
               };
             });
-          }
-        
       },[currentTime])
     
       useEffect(() => {
@@ -164,7 +173,7 @@ const ChatComponent = () => {
     return (
         <div className='row justify-content-center'>
             <div className='col' style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <div className='row justify-content-center' style={{ height: '50vh', border: '1px solid rgba(128, 128, 128, 0.5)', width: '50vw', marginBottom: '10px', padding: '10px', textAlign: 'center' }}>
+                <div className='row justify-content-center' style={{ height: '40vh', border: '1px solid rgba(128, 128, 128, 0.5)', width: '50vw', marginBottom: '10px', padding: '10px', textAlign: 'center' }}>
                     Appliances - TIME : {currentTime}
                     <div style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-around', width: '100%' }}>
                         {Object.keys(appliances).map((appliance) => (
@@ -185,74 +194,54 @@ const ChatComponent = () => {
                         ))}
                     </div>
                 </div>
-                <div className='row justify-content-center' style={{ height: '50vh', border: '1px solid rgba(128, 128, 128, 0.5)', width: '50vw', padding: '10px', textAlign: 'center' }}>
-                    Chart
+                <div className='row justify-content-center' style={{ height: '48vh', border: '1px solid rgba(128, 128, 128, 0.5)', width: '50vw', padding: '10px', textAlign: 'center' }}>
                     <div id={currentTime} style={{ height: '100%', width:'100%'}}>
-                        { chartData && chartData.length>0 ?<ResponsiveLine   
-                                key={Date.now()}                        
-                                data={chartData}
-                                margin={{ top: 20, right: 150, bottom: 50, left: 60 }}
-                                xScale={{ type: 'point' }}
-                                yScale={{
-                                    type: 'linear',
-                                    min: 'auto',
-                                    max: 'auto',
-                                    stacked: true,
-                                    reverse: false
-                                }}
-                                yFormat=" >-.2f"
-                                axisTop={null}
-                                axisRight={null}
-                                axisBottom={null}
-                                axisLeft={{
-                                    tickSize: 5,
-                                    tickPadding: 5,
-                                    tickRotation: 0,
-                                    legend: '',
-                                    legendOffset: -40,
-                                    legendPosition: 'middle',
-                                    truncateTickAt: 0
-                                }}
-                                colors={{ scheme: 'category10' }}
-                                pointColor={{ from: 'color', modifiers: [] }}
-                                pointSize={5}
-                                pointBorderWidth={2}
-                                pointBorderColor={{ from: 'serieColor' }}
-                                pointLabel="data.yFormatted"
-                                pointLabelYOffset={-12}
-                                enableTouchCrosshair={true}
-                                useMesh={true}
-                                legends={[
-                                    {
-                                        anchor: 'bottom-right',
-                                        direction: 'column',
-                                        justify: false,
-                                        translateX: 100,
-                                        translateY: 0,
-                                        itemsSpacing: 0,
-                                        itemDirection: 'left-to-right',
-                                        itemWidth: 80,
-                                        itemHeight: 20,
-                                        itemOpacity: 0.75,
-                                        symbolSize: 12,
-                                        symbolShape: 'circle',
-                                        symbolBorderColor: 'rgba(0, 0, 0, .5)',
-                                        effects: [
-                                            {
-                                                on: 'hover',
-                                                style: {
-                                                    itemBackground: 'rgba(0, 0, 0, .03)',
-                                                    itemOpacity: 1
-                                                }
-                                            }
-                                        ]
-                                    }
-                                ]}
-                            />:<></>}
+                        <HighchartsReact key={currentTime}
+                            highcharts={Highcharts}
+                            options={{
+                            title: {
+                                text: 'Chart',
+                            },
+                            xAxis: {
+                                categories: [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30],
+                            },
+                            yAxis: {
+                                title: {
+                                text: 'Value',
+                                },
+                            },
+                            series: [
+                                {
+                                name: 'Fridge-Predicted',
+                                data: chartValues['fridge_predicted'],
+                                },
+                                {
+                                name: 'Fridge-Current',
+                                data: chartValues['fridge_current'],
+                                },
+                                {
+                                name: 'Furnace-Predicted',
+                                data: chartValues['furnace_predicted'],
+                                },
+                                {
+                                name: 'Furnace-Current',
+                                data: chartValues['furnace_current'],
+                                },
+                                {
+                                name: 'Dishwasher-Predicted',
+                                data: chartValues['dishwasher_predicted'],
+                                },
+                                {
+                                name: 'Dishwasher-Current',
+                                data: chartValues['dishwasher_current'],
+                                }
+                            ],
+                            }}
+                        />
                         </div>
                 </div>
             </div>
-            <div className='col' style={{ height: '100vh', border: '1px solid rgba(128, 128, 128, 0.5)', width: '50vw', display: 'flex', flexDirection: 'column', alignItems: 'center', paddingLeft: '0' }}>
+            <div className='col' style={{ height: '98vh', border: '1px solid rgba(128, 128, 128, 0.5)', width: '50vw', display: 'flex', flexDirection: 'column', alignItems: 'center', paddingLeft: '0' }}>
                 {/* chatbot */}
                 <div ref={chatContainerRef} style={{ flex: 1, border: '1px solid rgba(128, 128, 128, 0.5)', width: '100%', overflowY: 'auto', textAlign: 'left', padding: '10px' }}>
                     {chatHistory.map((message, index) => (
