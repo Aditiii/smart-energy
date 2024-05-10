@@ -28,10 +28,6 @@ const ChatComponent = () => {
         furnace: 0,
         dishwasher: 0
     });
-
-    useEffect(()=>{
-        sendData()
-    },[appliancesKWHValues])
     
     const sendData = () => {
         const dataToSend = {
@@ -58,6 +54,10 @@ const ChatComponent = () => {
         });
     };
     
+    useEffect(()=>{
+        sendData()
+    },[appliancesKWHValues])
+
     // Call the fetchData function every minute
     // const interval = setInterval(sendData, 60000);
 
@@ -111,16 +111,18 @@ const ChatComponent = () => {
             const botMessageObj = { role: 'bot', content: message };
             setChatHistory(prevChatHistory => [...prevChatHistory, botMessageObj]);
         }
-            
-        if (target === "fridge") {
-            setAppliances(prevAppliances => ({ ...prevAppliances, fridge: service === "turn_on()" ? 'on' : 'off' }));
-        } else if (target === "furnace") {
-            setAppliances(prevAppliances => ({ ...prevAppliances, furnace: service === "turn_on()" ? 'on' : 'off' }));
-        } else if (target === "dishwasher") {
-            setAppliances(prevAppliances => ({ ...prevAppliances, dishwasher: service === "turn_on()" ? 'on' : 'off' }));
-        }
-        if (target === "all") {
-            // Handle target === "all"
+         
+        if(service === "turn_on()" || service ==="turn_off()"){
+            if (target === "fridge") {
+                setAppliances(prevAppliances => ({ ...prevAppliances, fridge: service === "turn_on()" ? 'on' : 'off' }));
+            } else if (target === "furnace") {
+                setAppliances(prevAppliances => ({ ...prevAppliances, furnace: service === "turn_on()" ? 'on' : 'off' }));
+            } else if (target === "dishwasher") {
+                setAppliances(prevAppliances => ({ ...prevAppliances, dishwasher: service === "turn_on()" ? 'on' : 'off' }));
+            }
+            if (target === "all") {
+                // Handle target === "all"
+            }
         }
         return message;
     }
@@ -137,6 +139,7 @@ const ChatComponent = () => {
         }
     }, [chatHistory]);
 
+    
     const setKWHValue=(value,appliance)=>{
         if (appliance === "fridge") {
             setAppliancesKWHValues(prevAppliancesKWHValues => ({ ...prevAppliancesKWHValues, fridge: value }));
