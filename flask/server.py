@@ -22,6 +22,8 @@ import json
 from openai import OpenAI
 import os
 from pprint import pprint
+import statsmodels.api as sm
+from statsmodels.tsa.arima.model import ARIMA
 
 app = Flask(__name__)
 CORS(app)
@@ -36,26 +38,112 @@ def get_prediction():
 
     data.columns = [i.replace(' [kW]', '') for i in data.columns]
     data['Furnace'] = data[['Furnace 1','Furnace 2']].sum(axis=1)
-    data['Kitchen'] = data[['Kitchen 12','Kitchen 14','Kitchen 38']].sum(axis=1) #We could also use the mean 
+    data['Kitchen'] = data[['Kitchen 12','Kitchen 14','Kitchen 38']].sum(axis=1)
     data.drop(['Furnace 1','Furnace 2','Kitchen 12','Kitchen 14','Kitchen 38','icon','summary'], axis=1, inplace=True)
 
-    #Replacing invalid values in 'cloudCover' with backfill
     data['cloudCover'].replace(['cloudCover'], method='bfill', inplace=True)
     data['cloudCover'] = data['cloudCover'].astype('float')
 
-    #Reordering
-    data = data[['use', 'gen', 'House overall', 'Dishwasher', 'Home office', 'Fridge', 'Wine cellar', 'Garage door', 'Barn',
-                'Well', 'Microwave', 'Living room', 'Furnace', 'Kitchen', 'Solar', 'temperature', 'humidity', 'visibility', 
-                'apparentTemperature', 'pressure', 'windSpeed', 'cloudCover', 'windBearing', 'precipIntensity', 
-                'dewPoint', 'precipProbability']]
-    
-    #correlation
     fig = plt.subplots(figsize=(8, 6))
     sns.heatmap(data[data.columns[0:15].tolist()].corr(), annot=True)
     plt.title('Correlation Matrix')
-    
+    data.drop(['use', 'gen'], axis=1, inplace=True)
+
+    data['month'] = data.index.month
+    data['day'] = data.index.day
+    data['weekday'] = data.index.day_name()
+    data['hour'] = data.index.hour
+    data['minute'] = data.index.minute
+
+    data_daily = data['Furnace'].resample('T').mean()
+    size = int(len(data_daily)*0.9)
+    train = data_daily[:size]
+    test = data_daily[size:]
+
+    model = ARIMA(train, order=(2,1,1))
+    model_fit = model.fit()
+    print('Akaike information criterion: ', model_fit.aic)
+    plt.figure(figsize=(15,4))
+    plt.plot(data_daily, c='blue',label='Data - Fridge')
+    plt.plot(model_fit.predict(dynamic=False), c='red', label='model')
+    plt.legend()
+    plt.grid(), plt.margins(x=0)
+    print(model_fit.summary())
+
+    new_fit = model_fit.append(data_daily[size:size+1], refit=False)
+    forecast = model_fit.forecast(len(test))
+    confidence = model_fit.get_forecast(len(test)).conf_int(0.05)
+    plt.figure(figsize=(15,4))
+    plt.plot(train, c='blue',label='train data')
+    plt.plot(model_fit.predict(dynamic=False), c='green', label='model')
+    plt.plot(test, c='blue',label='test data')
+    plt.plot(forecast, c='red', label='model')
+    plt.fill_between(confidence.index,confidence['lower Furnace'],
+                    confidence['upper Furnace'], color='k', alpha=.15)
+    plt.legend()
+    plt.grid(), plt.margins(x=0)
+    print('MSE: %.3f' % (mean_squared_error(test, forecast)))
+    print('RMSE: %.3f' % np.sqrt(mean_squared_error(test, forecast)))
+    MAE = mean_absolute_error(test, forecast)
+    print('MAE: %.3f' % MAE)
+
+    print('R2 score: %.3f' % r2_score(test, forecast))
+
+    n = 1
+    X = data_daily.values
+    size = int(len(X) * 0.9)
+    train, test = X[0:size], X[size:len(X)]
+    predictions = list()
+    confidence = list()
+    history = [x for x in train]
+    # walk-forward validation
+    for t in range(0,len(test),n):
+        model = ARIMA(history, order=(2,0,1))
+        model_fit = model.fit()
+        output = model_fit.forecast(n).tolist()
+        conf = model_fit.get_forecast(n).conf_int(0.05)
+        predictions.extend(output)
+        confidence.extend(conf)
+        obs = test.tolist()[t:t+n]
+        history = history[n:]
+        history.extend(obs);  
+    conf_int =  np.vstack(confidence)
+
+    m = len(predictions) - len(test)
+    index_extended = data_daily[size:].index.union(data_daily[size:].index.shift((m))[-(m):])
+    predictions_series = pd.Series(predictions, index=index_extended)
+    confidence = pd.DataFrame(conf_int, columns=['lower', 'upper'])
+    plt.figure(figsize=(15,4))
+    plt.plot(data_daily[:size], c='green',label='train data')
+    plt.plot(data_daily[size:], c='blue',label='test data')
+    plt.plot(predictions_series, c='red', label='predictions')
+    plt.fill_between(predictions_series.index, confidence['lower'],
+                    confidence['upper'], color='k', alpha=.15)
+    plt.legend()
+    plt.grid(), plt.margins(x=0)
+    plt.title('Results for Dishwasher Data'), plt.xticks(rotation=45)
+
+    print('MSE: %.5f' % (mean_squared_error(test, predictions[:len(test)])))
+    print('RMSE: %.3f' % np.sqrt(mean_squared_error(test, predictions[:len(test)])))
+    MAE = mean_absolute_error(test, predictions[:len(test)])
+    MAPE = np.mean(np.abs(predictions[:len(test)] - test)/np.abs(test))
+    MASE = np.mean(np.abs(test - predictions[:len(test)]))/(np.abs(np.diff(train)).sum()/(len(train)-1))
+    print('MAE: %.3f' % MAE)
+    print('R^2 score: %.3f' % r2_score(test, predictions[:len(test)]))
+
+    forecasted_values_dict.clear()
+    forecasted_values_dict = {"Dishwasher": [[index, value] for index, value in zip(predictions_series.index, predictions_series.values)]}
+    pp = pprint.PrettyPrinter(indent=4)
+    pp.pprint(forecasted_values_dict)
+    cleaned_data = {appliance: [value for _, value in values[:30]] for appliance, values in data.items()}
+
+    print(json.dumps(cleaned_data, indent=4))
+    json_data = json.dumps(cleaned_data)
+    with open('forecasted_values_month.json', 'w') as json_file:
+        json_file.write(json_data)
+
     try:
-        return jsonify({'success': 'hello ji'}), 200
+        return jsonify({'success': json_data}), 200
     except Exception as e:
         print(f"Error: {e}")
         return jsonify({'error': str(e)}), 500
