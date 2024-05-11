@@ -19,11 +19,14 @@ import pickle
 import openai
 import streamlit as st
 import json
-# from openai import OpenAI
+from openai import OpenAI
 import os
 from pprint import pprint
 import statsmodels.api as sm
 from statsmodels.tsa.arima.model import ARIMA
+
+os.environ["OPENAI_API_KEY"] = ""
+forecasted_data = {}
 
 app = Flask(__name__)
 CORS(app)
@@ -149,6 +152,11 @@ def get_prediction():
         return jsonify({'error': str(e)}), 500
 
 
+def load_data():
+    with open('forecasted_values_month.json') as f:
+        global forcasted_data
+        forcasted_data = json.load(f)
+
 def data_preprocessing():
     data = pd.read_csv("HomeC.csv",low_memory=False)
     data = data[:-1]
@@ -167,19 +175,24 @@ def ask_question():
         return jsonify({'error': str(e)}), 500
 
 def get_model_response(message):
-    openai.api_key = ''
-    chat = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages= [{ "role": "user", "content": message }],
-        stream=True
+    client = OpenAI()
+
+    response = client.chat.completions.create(
+    model="gpt-4-turbo",
+    messages=[
+        {
+        "role": "user",
+        "content": message
+        }
+    ],
+        temperature=0.2,
+        max_tokens=500,
+        top_p=1,
+        frequency_penalty=0,
+        presence_penalty=0
     )
-    response_line = ""
-    
-    for chunk in chat:
-        chunk_message = chunk['choices'][0]['delta']
-        if chunk_message.get('content'):
-            response_line += chunk_message['content']
-    return response_line
+
+    return response.choices[0].message.content
 
 @app.route('/get-response', methods=['POST'])
 @cross_origin()
@@ -191,7 +204,7 @@ def get_response():
         return jsonify({'error': str(e)}), 500
 
 def finetune_model():
-    client = openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY", ""))
+    client = openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY", "sk-proj-e3QZjmsa1hrsvNqwJnIHT3BlbkFJlVCgUArGrhReSbRYVUDz"))
     training_data = []
     training_data = prepare_example_conversation("train")
     validation_data = [] 
@@ -220,7 +233,7 @@ def finetune_model():
     response = client.fine_tuning.jobs.create(
     training_file=training_file_id,
     validation_file=validation_file_id,
-    model="gpt-3.5-turbo",
+    model="gpt-4-turbo",
     suffix="smart-energy",
     )
 
@@ -297,19 +310,28 @@ def anomaly_detection():
         fridge_predicted_values = predicted_values['fridge_predicted']
         furnace_predicted_values = predicted_values['furnace_predicted']
         dishwasher_predicted_values = predicted_values['dishwasher_predicted']
-  
-        if len(fridge_predicted_values) > currentTime and fridge_current_value > '0':
-            fridge_predicted_value = fridge_predicted_values[currentTime]
-            dishwasher_predicted_value = dishwasher_predicted_values[currentTime]
-            furnace_predicted_value = furnace_predicted_values[currentTime]
-            last_5_predicted_values = fridge_predicted_values[currentTime - 5:currentTime + 1]
-            last_5_predicted_values_str = ", ".join(str(val) for val in last_5_predicted_values)
-            if fridge_predicted_value is not None:
-                message = '''"Tell whether the energy consumption is anomalous or normal for fridge, predicted value for last 5 timestamps is {last_5_predicted_values_str} kWh, actual value is {fridge_current_value} kWh with a reason in this format\n 
-                "formatted output: {"to_say": "{Reason provided here}", "service": "anomaly()/normal()", "target": "fridge"} In the "to_say" field include a reason for the answer using chain of thought method and give a statistical reasoning for it using various methods like standard deviation, moving average, rate of change etc."'''
-           
-        else:
-            print('No predicted value available for the current time.')
+
+        index = currentTime%30
+
+        fridge_predicted_value = fridge_predicted_values[index]
+        dishwasher_predicted_value = dishwasher_predicted_values[index]
+        furnace_predicted_value = furnace_predicted_values[index]
+
+        global forecasted_data
+
+        f_output = '''"formatted output: {"to_say": "{explain here}", "service": "anomaly()", "target": "fridge"}'''
+
+        appliances = f"Fridge: {fridge_current_value} kWh, predicted value: {fridge_predicted_value} kWh"
+
+        context = f"Current: {forcasted_data['temperature'][index]}, {forcasted_data['humidity'][index]}, {forcasted_data['Fridge'][index]}\nPrevious: {forcasted_data['temperature'][index-1]}, {forcasted_data['humidity'][index-1]}, {forcasted_data['Fridge'][index-1]}, {forcasted_data['temperature'][index-2]}, {forcasted_data['humidity'][index-2]}, {forcasted_data['Fridge'][index-2]}, {forcasted_data['temperature'][index-3]}, {forcasted_data['humidity'][index-3]}, {forcasted_data['Fridge'][index-3]}"
+
+       
+        message = f'''Check if the energy consumption is anomalous or normal for the appliance: {appliances}.\n
+        Explain your interpretation with emphasis on the anomaly detection in the to_say method. Add your statistical analysis comparing temperature, humidity, energy usage using the following data: {context}. Just mention your statistical insights by calculating the variation. and also mention if there is a large variation comparing current with previous data points.\n
+        Finally, mention if this anomaly could be due to a malfunction in the appliance OR a discrepancy in the data collection process in the end\n
+
+        Give output in the following format: "{f_output} without a doublequote in the end'''
+        print(message)
 
         # question = data['question']
         model_response = get_model_response(message)
@@ -326,4 +348,5 @@ def write_jsonl(data_list: list, filename: str) -> None:
 
 if __name__ == '__main__':
     # finetune_model()
+    load_data()
     app.run(port=8000, debug=True)

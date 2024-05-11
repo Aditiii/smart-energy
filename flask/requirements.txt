@@ -1,0 +1,14 @@
+flask
+pandas
+flask-cors
+scikit-learn
+numpy
+matplotlib
+seaborn
+scipy
+torch
+transformers
+pmdarima
+streamlit
+openai
+statsmodels

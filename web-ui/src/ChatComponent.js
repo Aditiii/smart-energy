@@ -20,7 +20,6 @@ const ChatComponent = () => {
 
     const [chartValues , setChartValue] = useState(inputData);
      useEffect(()=>{
-        // console.log(chartValues)
      },[chartValues])
 
     const [appliancesKWHValues, setAppliancesKWHValues] = useState({
@@ -55,10 +54,10 @@ const ChatComponent = () => {
     };
     
     useEffect(()=>{
-        if (appliancesKWHValues.fridge > 0) {
-            sendData()
-        }
-    },[appliancesKWHValues])
+      if (appliancesKWHValues.fridge > 0) {
+          sendData()
+      }
+  },[appliancesKWHValues])
 
     // Call the fetchData function every minute
     // const interval = setInterval(sendData, 60000);
