@@ -55,7 +55,9 @@ const ChatComponent = () => {
     };
     
     useEffect(()=>{
-        sendData()
+        if (appliancesKWHValues.fridge > 0) {
+            sendData()
+        }
     },[appliancesKWHValues])
 
     // Call the fetchData function every minute

@@ -167,7 +167,7 @@ def ask_question():
         return jsonify({'error': str(e)}), 500
 
 def get_model_response(message):
-    openai.api_key = 'sk-proj-e3QZjmsa1hrsvNqwJnIHT3BlbkFJlVCgUArGrhReSbRYVUDz'
+    openai.api_key = ''
     chat = openai.ChatCompletion.create(
         model="gpt-3.5-turbo",
         messages= [{ "role": "user", "content": message }],
@@ -191,7 +191,7 @@ def get_response():
         return jsonify({'error': str(e)}), 500
 
 def finetune_model():
-    client = openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY", "sk-proj-e3QZjmsa1hrsvNqwJnIHT3BlbkFJlVCgUArGrhReSbRYVUDz"))
+    client = openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY", ""))
     training_data = []
     training_data = prepare_example_conversation("train")
     validation_data = [] 
@@ -297,14 +297,16 @@ def anomaly_detection():
         fridge_predicted_values = predicted_values['fridge_predicted']
         furnace_predicted_values = predicted_values['furnace_predicted']
         dishwasher_predicted_values = predicted_values['dishwasher_predicted']
-
-        if len(fridge_predicted_values) > currentTime:
+  
+        if len(fridge_predicted_values) > currentTime and fridge_current_value > '0':
             fridge_predicted_value = fridge_predicted_values[currentTime]
             dishwasher_predicted_value = dishwasher_predicted_values[currentTime]
             furnace_predicted_value = furnace_predicted_values[currentTime]
+            last_5_predicted_values = fridge_predicted_values[currentTime - 5:currentTime + 1]
+            last_5_predicted_values_str = ", ".join(str(val) for val in last_5_predicted_values)
             if fridge_predicted_value is not None:
-                message = '''"Tell whether the energy consumption is anomalous or normal for fridge, predicted value is {fridge_predicted_value} kWh, actual value is {fridge_current_value} kWh with a reason in this format\n 
-                '"formatted output: {"to_say": "The energy consumption of fridge is anomalous/normal with a reason why it is anomalous", "service": "anomaly()/normal()", "target": "fridge"}"'''
+                message = '''"Tell whether the energy consumption is anomalous or normal for fridge, predicted value for last 5 timestamps is {last_5_predicted_values_str} kWh, actual value is {fridge_current_value} kWh with a reason in this format\n 
+                "formatted output: {"to_say": "{Reason provided here}", "service": "anomaly()/normal()", "target": "fridge"} In the "to_say" field include a reason for the answer using chain of thought method and give a statistical reasoning for it using various methods like standard deviation, moving average, rate of change etc."'''
            
         else:
             print('No predicted value available for the current time.')
